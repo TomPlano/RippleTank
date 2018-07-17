@@ -1,8 +1,8 @@
 all:
-	gcc ripple.c Utils.c -fopenmp -lm -o ripple.x
+	gcc betterripple.c Utils.c -fopenmp -lm -o ripple.x
 
 debug:
-	gcc ripple.c Utils.c -fopenmp -lm -o life.debug -g
+	gcc betterripple.c Utils.c -fopenmp -lm -o ripple.debug -g
 clean:
 	rm *.x
 
