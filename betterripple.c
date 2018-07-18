@@ -9,7 +9,7 @@
 void pgrid(double** grid, int size);
 void clear(double** grid,int size);
 double discrete_wave_eq(double** u , double** um, double dx, double dy, double dt, int i, int j);
-
+void boundry_calc(double** grid, int size,double t );
 
 int main(int argc, char** argv)
 {
@@ -26,8 +26,13 @@ int L= atoi(argv[3]);
 
 double dx=1.0/(M+1.0);
 double dy=1.0/(M+1.0);
-double dt=(1.0*T)/(1.0*L);
-
+//double dt=(1.0*T)/(1.0*L);
+double dt=0.015;
+if(dt>0.015)
+{
+    printf("please choose <time> and <itters> such that <time>/<itters> < 0.015\n");
+    return 0;
+}
 double** grid_ptr= (double**)allocMat(M+2,sizeof(double));//sets all to zero
 double** next = (double**)allocMat(M+2,sizeof(double));
 double** prior = (double**)allocMat(M+2,sizeof(double));
@@ -50,16 +55,7 @@ for (int j=1; j<=M; j++)
         grid_ptr[j][i] = prior[j][i]+((dt*dt)/(4*dx*dx))*(prior[j][i-1]-2*prior[j][i]+prior[j][i+1])+((dt*dt)/(4*dy*dy))*(prior[j-1][i]-2*prior[j][i]+prior[j+1][i]);
 
 
-/* Compute u[0][i], u[N+1][i], u[j][0], u[j][M+1]
-using boboundary conditions */
-/*
-On the boundary points, i.e., for i = 0, i = M + 1,
-j = 0 and j = N + 1, the value of u
-ℓ
-is given as
-sin(2πx + 2πy + 2πt)
-*/
-
+boundry_calc(grid_ptr,M,0);
 
 #pragma omp parallel
 {
@@ -74,12 +70,9 @@ sin(2πx + 2πy + 2πt)
                         next[i][j]=discrete_wave_eq(grid_ptr,prior,dx,dy,dt,i,j);
                     }
             }
-        /*
-         Compute u[0][i], u[N+1][i], u[j][0], u[j][M+1]
-        using boboundary conditions */
-
         #pragma omp master
         {
+            boundry_calc(grid_ptr,M,T);
             //print out cuttent ittereation
             pgrid(grid_ptr,M+2);
             printf("\n");
@@ -103,6 +96,18 @@ return 0;
 }
 
 
+void boundry_calc(double** grid, int size,double t ){
+        //#pragma omp for
+        for(int c=0; c<size+2;c++)
+        {
+            grid[0][c] = sin(2.0*M_PI*0.0+2.0*M_PI*c+2*M_PI*t);
+            grid[c][0]= sin(2*M_PI*c+2*M_PI*0+2*M_PI*t);
+            grid[size+1][c]= sin(2*M_PI*(size+1)+2*M_PI*c+2*M_PI*t);
+            grid[c][size+1]= sin(2*M_PI*c+2*M_PI*(size+1)+2*M_PI*t);
+        }
+}
+
+
 double discrete_wave_eq(double** u , double** um, double dx, double dy, double dt, int i, int j)
 {
 
@@ -115,11 +120,11 @@ return  2*u[i][j]-um[i][j]+((dt*dt)/(2*dx*dx))*(u[i][j-1]-2*u[i][j]+u[i][j+1])+(
 
 void pgrid(double** grid, int size)
 {
-    for(int i=1;i<size-1;i++)
+    for(int i=0;i<size;i++)
     {
-        for(int j=1;j<size-1;j++)
+        for(int j=0;j<size;j++)
         {
-            printf("%f ",grid[i][j]);
+            printf("%.*f ",100 ,grid[i][j]);
         }
         printf("\n");
     } 
