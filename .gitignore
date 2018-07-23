@@ -54,3 +54,5 @@ dkms.conf
 
 # results files from cluster
 results.*
+*.gif
+*.png
