@@ -11,7 +11,7 @@
 void pgrid(double** grid, int size);
 void clear(double** grid,int size);
 double discrete_wave_eq(double** u , double** um, double dx, double dy, double dt, int i, int j);
-void send_to_printer(double**grid, int size, MPI_Comm comm);
+void send_to_printer(double**grid, double* sendbuf, int size, MPI_Comm comm);
 
 int main(int argc, char** argv)
 {
@@ -42,7 +42,7 @@ int rank_layout[6][6]={{0,13,14,15,16,0},
                       {16,13,14,15,16,13},
                       {0,1,2,3,4,0}};
 
-/*
+
 if(rank==0){
 //printer
 
@@ -51,20 +51,21 @@ int recive_size = (size-2)*(size-2);
 double* temp = (double*)malloc(recive_size*sizeof(double));
     for(double timestep=0; timestep<T; timestep+=dt)
     {
-        while(1){
+        int recived_count=0;
+        while(recived_count<16){
             MPI_Recv(temp, recive_size, MPI_DOUBLE, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD,&Stat);
-            //use Stat.MPI_RANK to locate in array
-            
-
-            
+            //use Stat.MPI_SOURCE to locate in array
+            printf("Recived from %i\n",Stat.MPI_SOURCE);
+            recived_count++;
         }
+        printf("===============\n");
     MPI_Barrier(MPI_COMM_WORLD); //wait till next timestep
     }
 free(temp);
-freeMat(out_grid,M);
+//freeMat(out_grid,M);
 }
 
-*/
+
 if(rank!=0){
 //find where you are in the topology
 int my_x_place;
@@ -84,6 +85,9 @@ double** next = (double**)allocMat(size+2,sizeof(double));
 double** prior = (double**)allocMat(size+2,sizeof(double));
 
 double** temp;
+int sendsz = (size-2)*(size-2);
+double* sendbuf = (double*)malloc(sendsz*sizeof(double));
+
     for(double timestep=0; timestep<T; timestep+=dt)
     {
             for(int i=1;i<size+1;i++)
@@ -114,20 +118,32 @@ double** temp;
                         next[size-1],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
             //flip back
             flipMat_d(next, size+2);
+            //prep for send
+            int t=0;
+            for(int i=1;i<size+1;i++)
+            {
+                for(int j=1;j<size+1;j++)
+                {
+                sendbuf[t] = grid_ptr[i][j];
+                t++;
+            }}
+            //send to printer
+            MPI_Send(sendbuf,sendsz, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
 
-            //send_to_printer(grid_ptr, size+2, MPI_COMM_WORLD);
+
             clear(prior,size+2);
             //ptr swap for next time step
             temp = next;
             next=prior;
             prior = grid_ptr;
             grid_ptr = temp;
-            //MPI_Barrier(MPI_COMM_WORLD);//block till next timestep
+            MPI_Barrier(MPI_COMM_WORLD);//block till next timestep
     }
 //cleanup
-freeMat(grid_ptr,size+2);
-freeMat(next,size+2);
-freeMat(prior,size+2);
+//freeMat(grid_ptr,size+2);
+//freeMat(next,size+2);
+//freeMat(prior,size+2);
+//free(sendbuf);
 }
 
 MPI_Finalize();
@@ -159,24 +175,3 @@ void clear(double** grid,int size){
   memset(grid[i],0,size);
   
 }
-
-
-void send_to_printer(double**grid, int size, MPI_Comm comm){
-
-double* sendbuf = (double*)malloc((size-2)*(size-2)*sizeof(double));
-int t=0;
-            for(int i=1;i<size;i++)
-            {
-                for(int j=1;j<size;j++)
-                {
-                sendbuf[t] = grid[i][j];
-                t++;
-            }}
-
-int sendsz = (size-2)*(size-2);
-MPI_Send(sendbuf,sendsz, MPI_DOUBLE, 0, 0, comm);
-free(sendbuf);
-}
-
-
-
