@@ -1,0 +1,8 @@
+#PBS -l nodes=17:ppn=12,walltime=00:00:10
+#PBS -q batch
+#PBS -N halo_ripple
+#PBS -j oe
+
+#cat $PBS_NODEFILE
+cd ~/RippleTank
+mpiexec -np 17 --map-by ppr:1:node --hostfile $PBS_NODEFILE ./hripple.x
