@@ -99,6 +99,7 @@ void freeMat_d(double** mat, int size)
     {
         free(mat[i]);
     }
+    free(mat);
 }
 
 void flipMat_d(double** a, int size)

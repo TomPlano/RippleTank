@@ -5,4 +5,5 @@
 
 #cat $PBS_NODEFILE
 cd ~/RippleTank
+export MALLOC_CHECK_=2
 mpiexec -np 17 --map-by ppr:1:node --hostfile $PBS_NODEFILE ./hripple.x
