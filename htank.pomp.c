@@ -27,7 +27,7 @@ int main(int argc, char** argv)
         double** out_grid;
 
 //TODO: support non square sufaces at some point
-        int M = 60;//Size of surface, will be a square
+        int M = 2000;//Size of surface, will be a square
         int T= 4;//Total time of simulation
         int L= 1;//Number of itterations, will be used to compute a stable dt eventually
 
@@ -49,11 +49,13 @@ int main(int argc, char** argv)
 
 
         if(rank==0) {
-//printer
+	//printer
 
                 out_grid= (double**)allocMat(M,sizeof(double));
                 int recive_size = (size)*(size);
                 double* temp = (double*)malloc(recive_size*sizeof(double));
+
+		double start = MPI_Wtime();
                 for(double timestep=0; timestep<T; timestep+=dt)
                 {
                         int recived_count=0;
@@ -63,26 +65,41 @@ int main(int argc, char** argv)
                                 //printf("Recived from %i\n",Stat.MPI_SOURCE);
                                 recived_count++;
                                 //put data where it belongs
-                                int xstart = (Stat.MPI_SOURCE-1)%4 * size;
-                                int xend = xstart + (size);
+				int xstart=0;
+				int ystart=0;
+                                for(int i = 1; i < 5; i++){
+                                    for(int j = 1; j < 5; j++){
+					if(rank_layout[i][j]==Stat.MPI_SOURCE) {
+						xstart=i-1;
+						ystart=j-1;
+						break;
+						}
+					}
+					if (xstart!=0) break;
+				}
                                 int t = 0;
                  
-                                for(int i = xstart; i < xend; i++){
-                                    for(int j = xstart; j < xend; j++){
+				xstart*=size;
+				ystart*=size;
+					//printf("rank:%i, %i %i",Stat.MPI_SOURCE ,xstart,ystart);
+                                for(int i = xstart; i < xstart+size; i++){
+                                    for(int j = ystart; j < ystart+size; j++){
                                         out_grid[i][j] = temp[t];
                                         t++;
                                     }
                                 } 
                         }
                         //printf("=======================\n");
-                        pgrid(out_grid,M);
+//                        pgrid(out_grid,M);
                         //print out actual data
-                        printf("\n");
-                        printf("\n");
+//                        printf("\n");
+//                        printf("\n");
                         MPI_Barrier(MPI_COMM_WORLD); //wait till next timestep
                 }
-                free(temp);
-//freeMat(out_grid,M);
+		//free(temp);
+		//freeMat(out_grid,M);
+		double end = MPI_Wtime();
+		printf("%i, %f\n", M, end-start);
         }
 
 
@@ -102,7 +119,13 @@ int main(int argc, char** argv)
 //allocMat actually calls calloc, thus is zeroed
                 grid_ptr= (double**)allocMat(size+2,sizeof(double));
                 next = (double**)allocMat(size+2,sizeof(double));
-                prior = (double**)allocMat(size+2,sizeof(double));
+                prior = (double**)allocMat(size+2,sizeof(double));	
+
+		double* left = (double*)malloc(size*sizeof(double));	
+		double* right = (double*)malloc(size*sizeof(double));	
+	
+		double* halo_left = (double*)malloc(size*sizeof(double));	
+		double* halo_right = (double*)malloc(size*sizeof(double));	
 
                 double** temp;
                 int sendsz = (size)*(size);
@@ -110,40 +133,50 @@ int main(int argc, char** argv)
 
                 for(double timestep=0; timestep<T; timestep+=dt)
                 {
+
+                        //exchange grid_ptr with other ranks
+                        //up
+                        MPI_Sendrecv(&grid_ptr[1][1],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,
+                                     &grid_ptr[size+1][1],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,MPI_COMM_WORLD,&Stat);
+                        //down
+                        MPI_Sendrecv(&grid_ptr[size][1],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,
+                                     &grid_ptr[0][1],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,MPI_COMM_WORLD,&Stat);
+                        //extract left and right
+			for(int i = 1;i<size-1;i++){
+				left[i] = grid_ptr[i][1];
+				right[i] = grid_ptr[i][size];
+			}
+                        //left
+                        MPI_Sendrecv(left,size,MPI_DOUBLE,rank_layout[my_x_place][my_y_place-1],0,
+                                   halo_right,size,MPI_DOUBLE,rank_layout[my_x_place][my_y_place+1],0,MPI_COMM_WORLD,&Stat);
+                        //right
+                        MPI_Sendrecv(right,size,MPI_DOUBLE,rank_layout[my_x_place][my_y_place+1],0,
+                                     halo_left,size,MPI_DOUBLE,rank_layout[my_x_place][my_y_place-1],0,MPI_COMM_WORLD,&Stat);
+			//put left and right halo in place
+			for(int i = 1;i<size-1;i++){
+				grid_ptr[i][0]=halo_left[i];
+				grid_ptr[i][size+1]=halo_right[i];
+			}
+
+			//compute timestep
                         for(int i=1; i<size+1; i++)
                         {
                                 for(int j=1; j<size+1; j++)
                                 {
                                         //first if statment defines our osilator
                                         //TODO: find a better what to define osilators
-                                        if (rank==10&&i==j&&i==size){
-                                            next[i][j] = 5*sin(2*M_PI*3*timestep);
+                                        if (rank==6&&i==j&&i==size/2){
+                                            next[i][j] = 10*sin(2*M_PI*3*timestep);
                                         }
                                         else{
                                            next[i][j]=discrete_wave_eq(grid_ptr,prior,dx,dy,dt,i,j);
                                         }
-                                        next[i][j]=rank;
                                 }
                         }
 
-                        //exchange with other ranks
-                        //up
-                        MPI_Sendrecv(next[1],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,
-                                     next[size-2],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-                        //down
-                        MPI_Sendrecv(next[size-2],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,
-                                     next[0],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-                        //flip mat
-                        flipMat_d(next, size+2);//will cause trouble
-                        //left
-                        MPI_Sendrecv(next[1],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,
-                                     next[size-2],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-                        //right
-                        MPI_Sendrecv(next[size-2],size,MPI_DOUBLE,rank_layout[my_x_place+1][my_y_place],0,
-                                     next[0],size,MPI_DOUBLE,rank_layout[my_x_place-1][my_y_place],0,MPI_COMM_WORLD,MPI_STATUS_IGNORE);
-                        //flip back
-                        flipMat_d(next, size+2);
-                        //prep for send (serialize)
+
+
+                        //prep for send to 0 (serialize)
                         int t=0;
                         for(int i=1; i<size+1; i++)
                         {
@@ -155,7 +188,7 @@ int main(int argc, char** argv)
                         }
                         //send to printer
                         MPI_Send(sendbuf,sendsz, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-
+//			if (rank==2) pgrid(next,size+2);
                         clear(prior,size+2);
                         //ptr swap for next time step
                         temp = next;
@@ -197,7 +230,7 @@ double discrete_wave_eq(double** u, double** um, double dx, double dy, double dt
 void pgrid(double** grid, int size){
         for(int i=0; i<size; i++) {
                 for(int j=0; j<size; j++) {
-                        printf("%.*f ",10,grid[i][j]);
+                        printf("%.*f, ",30,grid[i][j]);
                 }
                 printf("\n");
         }

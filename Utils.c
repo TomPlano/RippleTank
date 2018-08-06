@@ -9,7 +9,7 @@ void* allocVec(int size, int type_size)
 
 void** allocMat(int size, int type_size )
 {
-    void** temp = (void**)malloc(size*sizeof(void*));
+    void** temp = (void**)calloc(size,sizeof(void*));
     int i;
     for(i = 0; i<size; i++){
         temp[i] = (void*)calloc(size, type_size);
@@ -85,7 +85,7 @@ void flipMat_d(double** a, int size)
 {   
      for (int i=0;i<size; i++)
     {
-        for (int j=0;j<size; j++)
+        for (int j=i;j<size; j++)
         {
             double temp = a[i][j];
             a[i][j] = a[j][i];

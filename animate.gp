@@ -6,7 +6,7 @@ set term gif animate delay 1
 set output ARG1
 stats ARG2 nooutput
 set zrange [-ARG3:ARG3]
-set dgrid3d 60,60 gauss 1
+set dgrid3d 60,60 gauss .5
 unset  key
 set view 60, 75, 1, 1
 set hidden3d back offset 1 trianglepattern 3 undefined 1 altdiagonal bentover
